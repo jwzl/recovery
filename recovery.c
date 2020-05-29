@@ -733,6 +733,7 @@ main(int argc, char **argv) {
     ui_set_background(BACKGROUND_ICON_INSTALLING);
     load_volume_table();
     setFlashPoint();
+    ui_reset_progress();
 
     bSDBoot = is_boot_from_SD();
     if(!bSDBoot) {
@@ -748,7 +749,9 @@ main(int argc, char **argv) {
                 ui_show_text(1);
                 printf("sdupdate_package = %s \n",sdupdate_package);
             }
-        }
+        }else{
+			get_args(&argc, &argv);
+		}
     }
 
     int previous_runs = 0;

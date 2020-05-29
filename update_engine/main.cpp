@@ -16,13 +16,27 @@
 #include "../bootloader.h"
 #include "defineHeader.h"
 
+FILE* cmd_pipe = NULL;
 RK_Upgrade_Status_t m_status = RK_UPGRADE_ERR;
+
+void handle_upgrade_progress(int portion, int seconds)
+{	
+    if(cmd_pipe != NULL){
+        if (seconds==0)
+            fprintf(cmd_pipe, "set_progress=%d\n", portion);
+        else
+            fprintf(cmd_pipe, "progress=%d %d\n", portion, seconds);
+    }
+}
 
 void handle_upgrade_callback(void *user_data, RK_Upgrade_Status_t status){
     if (status == RK_UPGRADE_FINISHED) {
         LOGI("rk ota success.\n");
         setSlotActivity();
-    }
+		handle_upgrade_progress(9, 0);
+    }else if (status == RK_UPGRADE_START){
+		handle_upgrade_progress(1, 1);
+	}
     m_status = status;
     LOGI("rk m_status = %d.\n", m_status);
 }
@@ -36,7 +50,8 @@ static int MiscUpdate(char *url,  char *update_partition, char *save_path) {
     }
     if (update_partition == NULL) {
         //没有传入要升级的分区，默认升级，u-boot，trust，boot，recovery，boot，rootfs，oem
-        partition = 0x3F00;
+       // partition = 0x3F00;
+	   partition = 0x00;
     } else {
         partition = strtol(update_partition+2, NULL, 16);
     }
@@ -56,7 +71,7 @@ static int MiscUpdate(char *url,  char *update_partition, char *save_path) {
         }
     }
 
-    //写MISC
+    //write MISC part.
     struct bootloader_message msg;
     memset(&msg, 0, sizeof(msg));
     char recovery_str[] = "recovery\n--update_package=";
@@ -134,7 +149,12 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    if ( is_update ) {
+	if(pipefd > 0 ){
+		cmd_pipe = fdopen(pipefd, "wb");
+		setlinebuf(cmd_pipe);
+	}
+	
+	if ( is_update ) {
         int res = 0x3F00; //默认升级的分区
         if (partition != NULL) {
             res = strtol(partition+2, NULL, 16);

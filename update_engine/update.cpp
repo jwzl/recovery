@@ -18,7 +18,7 @@
 static char * _url = NULL;
 static char * _save_path = NULL;
 double processvalue = 0;
-
+extern void handle_upgrade_progress(int portion, int seconds);
 void RK_ota_set_url(char *url, char *savepath) {
     LOGI("start RK_ota_url.\n");
     if ( url == NULL ) {
@@ -38,7 +38,7 @@ bool is_sdboot = false;
 
 UPDATE_CMD update_cmd[] = {
     {"bootloader", false, false, 0, 0, 0, "", flash_bootloader},
-    {"parameter", false, false, 0, 0, 0,"", flash_parameter},
+   /* {"parameter", false, false, 0, 0, 0,"", flash_parameter},*/
     {"uboot", false, false, 0, 0, 0,"", flash_normal},
     {"trust", false, false, 0, 0, 0,"", flash_normal},
     {"boot", false, true, 0, 0, 0,"", flash_normal},
@@ -49,16 +49,6 @@ UPDATE_CMD update_cmd[] = {
 };
 
 bool RK_ota_set_partition(int partition) {
-    //0000000000000000 : 没有升级分区
-    //1000000000000000 : 升级loader分区
-    //0100000000000000 : 升级parameter分区
-    //0010000000000000 : 升级uboot分区
-    //0001000000000000 : 升级trust分区
-    //0000100000000000 : 升级boot分区
-    //0000010000000000 : 升级recovery分区
-    //0000001000000000 : 升级rootfs分区
-    //0000000100000000 : 升级oem分区
-    //0000000010000000 : 升级misc分区，sdboot使用
     int num = sizeof(update_cmd)/sizeof(UPDATE_CMD);
     if (partition == -1) {
         //设置目标分区大小
@@ -71,8 +61,9 @@ bool RK_ota_set_partition(int partition) {
             if ( update_cmd[i].need_update ) {
                 update_cmd[i].need_update = false;
                 for (int j = 0; j < rkimage_hdr.item_count; j++) {
+					//LOGI("XXXXXXXX rkimage_hdr.item[%d].name = %s.\n", j, rkimage_hdr.item[j].name);
                     if (strcmp(rkimage_hdr.item[j].name, update_cmd[i].name) == 0) {
-                        LOGI("found rkimage_hdr.item[%d].name = %s.\n", j, update_cmd[i].name);
+                       // LOGI("found rkimage_hdr.item[%d].name = %s.\n", j, update_cmd[i].name);
                         if (rkimage_hdr.item[j].file[50]=='H') {
                             update_cmd[i].offset = *((DWORD *)(&rkimage_hdr.item[j].file[51]));
                             update_cmd[i].offset <<= 32;
@@ -104,56 +95,59 @@ bool RK_ota_set_partition(int partition) {
     }
 
     for (int i = 0; i < num; i++) {
-        if ( (partition & 0x8000) ) {
-            LOGI("need update %s.\n", update_cmd[i].name);
-            update_cmd[i].need_update = true;
+        //if ( (partition & 0x8000) ) {
+        //    LOGI("need update %s.\n", update_cmd[i].name);
+		/*
+		 * we Asume all update is need to be updated.
+	   	*/
+		update_cmd[i].need_update = true;
 
-            if (!isMtdDevice()) {
-                int slot = getCurrentSlot();
-                if (is_sdboot) {
+		if (!isMtdDevice()) {
+        	int slot = getCurrentSlot();
+        	if (is_sdboot) {
                     char flash_name[20];
                     getFlashPoint(flash_name);
                     sprintf(update_cmd[i].dest_path, "%s", flash_name);
-                } else if ((slot == 0 || slot == 1) && update_cmd[i].is_ab) {
+			} else if ((slot == 0 || slot == 1) && update_cmd[i].is_ab) {
                     //双分区
                     if(strcmp(update_cmd[i].name, "rootfs") == 0){
                         sprintf(update_cmd[i].dest_path, "/dev/block/by-name/%s_%c", "system", slot == 0?'b':'a');
                     } else {
                         sprintf(update_cmd[i].dest_path, "/dev/block/by-name/%s_%c", update_cmd[i].name, slot == 0?'b':'a');
                     }
-                } else {
-                    //非双分区
-                    sprintf(update_cmd[i].dest_path, "/dev/block/by-name/%s", update_cmd[i].name);
-                }
-            } else {
-                if (is_sdboot) {
+			} else {
+				//non-double parttion.
+				sprintf(update_cmd[i].dest_path, "/dev/disk/by-partlabel/%s", update_cmd[i].name);
+			}
+		} else {
+			if (is_sdboot) {
                     sprintf(update_cmd[i].dest_path, "%s", "/mnt/sdcard/sdupdate.bin");
                     LOGI("update_cmd[%i].des_path = %s.\n", i, update_cmd[i].dest_path);
-                } else {
+			} else {
                     strcpy(update_cmd[i].dest_path, update_cmd[i].name);
-                }
-            }
-        }
-        partition = (partition << 1);
+			}
+		}
     }
 
-    return true;
+   return true;
 
 }
 
 void RK_ota_start(RK_upgrade_callback cb) {
     LOGI("start RK_ota_start.\n");
-    processvalue = 95;
+    processvalue = 0;
     cb(NULL, RK_UPGRADE_START);
 
-    //确认升级路径
+    //check  the image url
     if (_url == NULL) {
         LOGE("url is NULL\n");
         cb(NULL, RK_UPGRADE_ERR);
         return ;
     }
 
-    // 1. 获取文件
+	processvalue = 50;
+    handle_upgrade_progress(10, 10);
+    // 1. get update.img file
     int res = download_file(_url, _save_path);
     if (res == 0) {
         _url = _save_path;
@@ -163,15 +157,21 @@ void RK_ota_start(RK_upgrade_callback cb) {
         return ;
     }
 
-    // 2. 获取文件信息
+    // 2. get the update file info.
     if (!RK_ota_set_partition(-1)) {
         LOGE("RK_ota_set_partition failed.\n");
         cb(NULL, RK_UPGRADE_ERR);
         return ;
     }
-
-    // 3. 下载文件到分区并校验
+    // 3. download and check.
+	int update_file_cnt = 0; 
     int num = sizeof(update_cmd)/sizeof(UPDATE_CMD);
+	for (int i = 0; i < num; i++ ) {
+        if (update_cmd[i].need_update) {
+			update_file_cnt++;	
+		}
+	}
+
     for (int i = 0; i < num; i++ ) {
         if (update_cmd[i].need_update) {
             if (update_cmd[i].cmd != NULL) {
@@ -180,23 +180,25 @@ void RK_ota_start(RK_upgrade_callback cb) {
                     LOGI("ingore misc.\n");
                     continue;
                 }
-                // 下载固件到分区
+                // download...
+				processvalue = 80/update_file_cnt;
+				if(strcmp(update_cmd[i].name, "rootfs") == 0){
+                	handle_upgrade_progress(processvalue , 120);
+				}else{
+					handle_upgrade_progress(processvalue , 10);
+				}	
                 printf("update_cmd.flash_offset = %lld.\n", update_cmd[i].flash_offset);
                 if (update_cmd[i].cmd(_url, (void*)(&update_cmd[i])) != 0) {
                     LOGE("update %s error.\n", update_cmd[i].dest_path);
                     cb(NULL, RK_UPGRADE_ERR);
                     return ;
                 }
+
                 if (is_sdboot) {
                     LOGI("not check in sdboot.\n");
                     continue;
                 }
-                // parameter 和loader 先不校验
-                if (strcmp(update_cmd[i].name, "parameter") == 0 || strcmp(update_cmd[i].name, "bootloader") == 0) {
-                    LOGI("not check parameter and loader.\n");
-                    continue;
-                }
-                // 校验分区
+                // check checksum  
                 if (comparefile(update_cmd[i].dest_path, _url, update_cmd[i].flash_offset, update_cmd[i].offset, update_cmd[i].size))
                 {
                     LOGI("check %s ok.\n", update_cmd[i].dest_path);
@@ -209,10 +211,9 @@ void RK_ota_start(RK_upgrade_callback cb) {
         }
     }
 
-    // 4. 是否设置misc
-
     LOGI("RK_ota_start is ok!");
     processvalue = 100;
+	handle_upgrade_progress(80%update_file_cnt ,2);
     cb(NULL, RK_UPGRADE_FINISHED);
 }
 

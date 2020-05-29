@@ -41,7 +41,7 @@ static const int BOOTLOADER_MESSAGE_OFFSET_IN_MISC = 16 * 1024;
 #define AVB_AB_MAX_PRIORITY 15
 #define AVB_AB_MAX_TRIES_REMAINING 7
 
-#define MISC_PARTITION_NAME_BLOCK "/dev/block/by-name/misc"
+#define MISC_PARTITION_NAME_BLOCK "/dev/disk/by-partlabel/misc"
 #define MISC_PARTITION_NAME_MTD "misc"
 
 #define CMD_WIPE_USERDATA "cmd_wipe_userdata"

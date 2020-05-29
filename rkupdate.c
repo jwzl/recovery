@@ -28,24 +28,25 @@ static int start_main (const char *binary, char *args[], int* pipefd) {
 
     char buffer[1024];
     FILE* from_child = fdopen(pipefd[0], "r");
-    while (fgets(buffer, sizeof(buffer), from_child) != NULL) {
-        char* command = strtok(buffer, " \n");
+    while (fgets(buffer, sizeof(buffer), from_child) != NULL) {	
+        char* command = strtok(buffer, "=");
         if (command == NULL) {
             continue;
         } else if (strcmp(command, "progress") == 0) {
-            char* fraction_s = strtok(NULL, " \n");
-            char* seconds_s = strtok(NULL, " \n");
+			char *tmp = strtok(NULL, "=");	
+			char* fraction_s = strtok(tmp, " ");
+            char* seconds_s = strtok(NULL, " ");
 
-            float fraction = strtof(fraction_s, NULL);
+            float fraction = (float)strtol(fraction_s, NULL);
             int seconds = strtol(seconds_s, NULL, 10);
-
-            ui_show_progress(fraction * (1-VERIFICATION_PROGRESS_FRACTION), seconds);
+            ui_show_progress(fraction/100, seconds);
         } else if (strcmp(command, "set_progress") == 0) {
-            char* fraction_s = strtok(NULL, " \n");
-            float fraction = strtof(fraction_s, NULL);
-            ui_set_progress(fraction);
+            char* fraction_s = strtok(NULL, "=");
+            float fraction = (float)strtol(fraction_s, NULL);
+
+            ui_set_progress(fraction/100);
         } else if (strcmp(command, "ui_print") == 0) {
-            char* str = strtok(NULL, "\n");
+            char* str = strtok(NULL, "=");
             if (str) {
                 printf("ui_print = %s.\n", str);
                 ui_print("%s", str);

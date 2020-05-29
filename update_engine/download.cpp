@@ -15,6 +15,7 @@ size_t my_write_func(void *ptr, size_t size, size_t nmemb, FILE *stream)
 }
 
 extern double processvalue;
+extern void handle_upgrade_progress(int portion, int seconds);
 
 int my_progress_func(char *progress_data,
                      double t, /* dltotal */
@@ -22,7 +23,8 @@ int my_progress_func(char *progress_data,
                      double ultotal,
                      double ulnow)
 {
-    processvalue = ulnow / ultotal * 100 / 110;
+    processvalue = ulnow / ultotal * 50 / 100;
+	handle_upgrade_progress(processvalue, 10);
     return 0;
 }
 

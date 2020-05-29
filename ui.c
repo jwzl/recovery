@@ -126,7 +126,7 @@ static void draw_progress_locked()
     if (gProgressBarType == PROGRESSBAR_TYPE_NORMAL) {
         float progress = gProgressScopeStart + gProgress * gProgressScopeSize;
         int pos = (int) (progress * width);
-
+	
         if (pos > 0) {
           gr_blit(gProgressBarFill, 0, 0, pos, height, dx, dy);
         }
@@ -214,7 +214,6 @@ static void *progress_thread(void *cookie)
     for (;;) {
         usleep(1000000 / PROGRESSBAR_INDETERMINATE_FPS);
         pthread_mutex_lock(&gUpdateMutex);
-
         // update the progress bar animation, if active
         // skip this if we have a text overlay (too expensive to update)
         if (gProgressBarType == PROGRESSBAR_TYPE_INDETERMINATE && !show_text) {
